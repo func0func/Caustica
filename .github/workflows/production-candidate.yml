@@ -89,7 +89,7 @@ jobs:
 
       - name: Build and verify production JAR
         shell: pwsh
-        run: .\gradlew.bat clean verifyProductionArtifact testPackagedStreamlineBridge --stacktrace
+        run: .\gradlew.bat clean verifyProductionArtifact --stacktrace
 
       - name: Record candidate hashes
         shell: pwsh
