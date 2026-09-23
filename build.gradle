@@ -398,20 +398,39 @@ def verifyStreamlineProductionInputs = tasks.register("verifyStreamlineProductio
 		if (!missingNotices.empty) {
 			throw new GradleException("Missing Streamline distribution notice(s): ${missingNotices.join(', ')}")
 		}
-		def unsigned = streamlineVendorNames.findAll { name ->
+		// The official NVIDIA archive is pinned by SHA-256 in CI. GitHub-hosted Windows runners can
+		// report NotTrusted/UnknownError for otherwise intact Authenticode signatures when their
+		// certificate chain cannot be completed. When CI has verified the exact published archive,
+		// require an embedded signer and reject NotSigned/HashMismatch instead of requiring Status=Valid.
+		def pinnedArchiveSha256 = "f5c0a3d870707dddc3570fb4bcd3655cf48a8a68c3a9d342910cfa21b77dcf48"
+		def verifiedArchiveSha256 = System.getenv("CAUSTICA_STREAMLINE_ARCHIVE_SHA256_VERIFIED") ?: ""
+		def allowOfflineChainValidation = verifiedArchiveSha256.equalsIgnoreCase(pinnedArchiveSha256)
+		def invalid = streamlineVendorNames.findAll { name ->
 			def candidate = new File(vendorRoot, name)
 			if (!candidate.isFile() || !name.toLowerCase(java.util.Locale.ROOT).endsWith(".dll")) {
 				return false
 			}
-			def process = new ProcessBuilder("powershell.exe", "-NoProfile", "-NonInteractive", "-Command",
-					"(Get-AuthenticodeSignature -LiteralPath '${candidate.absolutePath.replace("'", "''")}').Status")
+			def escaped = candidate.absolutePath.replace("'", "''")
+			def command = allowOfflineChainValidation
+					? "\$s=Get-AuthenticodeSignature -LiteralPath '${escaped}'; Write-Output (\$s.Status.ToString() + '|' + ([bool](\$null -ne \$s.SignerCertificate)))"
+					: "(Get-AuthenticodeSignature -LiteralPath '${escaped}').Status"
+			def process = new ProcessBuilder("powershell.exe", "-NoProfile", "-NonInteractive", "-Command", command)
 					.redirectErrorStream(true).start()
-			def status = process.inputStream.getText("UTF-8").trim()
-			process.waitFor()
-			return status != "Valid"
+			def output = process.inputStream.getText("UTF-8").trim()
+			def exitCode = process.waitFor()
+			if (exitCode != 0) {
+				return true
+			}
+			if (!allowOfflineChainValidation) {
+				return output != "Valid"
+			}
+			def parts = output.split("\\|", 2)
+			def status = parts.length > 0 ? parts[0].trim() : ""
+			def hasSigner = parts.length > 1 && parts[1].trim().equalsIgnoreCase("True")
+			return !hasSigner || status in ["NotSigned", "HashMismatch", "NotSupportedFileFormat", "Incompatible"]
 		}
-		if (!unsigned.empty) {
-			throw new GradleException("Unsigned or unverifiable production Streamline binaries: ${unsigned.join(', ')}")
+		if (!invalid.empty) {
+			throw new GradleException("Unsigned, modified, or unverifiable production Streamline binaries: ${invalid.join(', ')}")
 		}
 	}
 }
