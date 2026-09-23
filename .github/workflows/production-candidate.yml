@@ -87,9 +87,9 @@ jobs:
           "CAUSTICA_STREAMLINE_ARCHIVE_SHA256_VERIFIED=$env:STREAMLINE_SDK_SHA256" | Out-File -FilePath $env:GITHUB_ENV -Append
           Write-Host "STREAMLINE_SDK=$sdk"
 
-      - name: Build and test exact production candidate
+      - name: Build and verify production JAR
         shell: pwsh
-        run: .\gradlew.bat clean build --stacktrace
+        run: .\gradlew.bat clean verifyProductionArtifact testPackagedStreamlineBridge --stacktrace
 
       - name: Record candidate hashes
         shell: pwsh
