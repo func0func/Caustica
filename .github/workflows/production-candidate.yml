@@ -8,7 +8,8 @@ on:
       - main
     paths:
       - ".github/workflows/production-candidate.yml"
-      - "build.gradle"\n      - "src/**"
+      - "build.gradle"
+      - "src/**"
 
 permissions:
   contents: read
