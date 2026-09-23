@@ -2,6 +2,11 @@ name: Production candidate
 
 on:
   workflow_dispatch:
+  push:
+    branches:
+      - main
+    paths:
+      - ".github/workflows/production-candidate.yml"
 
 permissions:
   contents: read
@@ -10,6 +15,8 @@ env:
   VULKAN_SDK_VERSION: 1.4.350.0
   SLANG_VERSION: "2026.13"
   SLANG_SHA256: 6bae110faa3b51ea00316e0a1dd4f40b11eb196a2e3a135074300bf2d5d4c777
+  STREAMLINE_SDK_VERSION: "2.12.0"
+  STREAMLINE_SDK_SHA256: f5c0a3d870707dddc3570fb4bcd3655cf48a8a68c3a9d342910cfa21b77dcf48
 
 jobs:
   build:
@@ -52,28 +59,29 @@ jobs:
           "CAUSTICA_SLANGC=$($slangc.FullName)" | Out-File -FilePath $env:GITHUB_ENV -Append
           & $slangc.FullName -version
 
-      - name: Download private Streamline 2.12 production SDK
+      - name: Download NVIDIA Streamline 2.12 production SDK
         shell: pwsh
-        env:
-          STREAMLINE_SDK_URL: ${{ secrets.STREAMLINE_SDK_URL }}
-          STREAMLINE_SDK_SHA256: ${{ secrets.STREAMLINE_SDK_SHA256 }}
         run: |
-          if (-not $env:STREAMLINE_SDK_URL -or -not $env:STREAMLINE_SDK_SHA256) {
-            throw "Configure STREAMLINE_SDK_URL and STREAMLINE_SDK_SHA256 repository secrets"
-          }
-          $archive = Join-Path $env:RUNNER_TEMP 'streamline-sdk.zip'
-          Invoke-WebRequest -Uri $env:STREAMLINE_SDK_URL -OutFile $archive
+          $archiveName = "streamline-sdk-v$env:STREAMLINE_SDK_VERSION.zip"
+          $url = "https://github.com/NVIDIA-RTX/Streamline/releases/download/v$env:STREAMLINE_SDK_VERSION/$archiveName"
+          $archive = Join-Path $env:RUNNER_TEMP $archiveName
+          Invoke-WebRequest -Uri $url -OutFile $archive
           if ((Get-FileHash $archive -Algorithm SHA256).Hash -ne $env:STREAMLINE_SDK_SHA256.ToUpperInvariant()) {
             throw "Streamline SDK archive hash mismatch"
           }
           $extract = Join-Path $env:RUNNER_TEMP 'streamline-sdk'
           Expand-Archive -LiteralPath $archive -DestinationPath $extract
-          $interposer = Get-ChildItem $extract -Recurse -Filter sl.interposer.dll |
-            Where-Object { $_.FullName -match '[\\/]bin[\\/]x64[\\/]sl\.interposer\.dll$' } |
+          $slHeader = Get-ChildItem $extract -Recurse -Filter sl.h |
+            Where-Object { $_.FullName -match '[\\/]include[\\/]sl\.h$' } |
             Select-Object -First 1
-          if (-not $interposer) { throw "Streamline production bin/x64 directory was not found" }
-          $sdk = Split-Path (Split-Path (Split-Path $interposer.FullName -Parent) -Parent) -Parent
+          if (-not $slHeader) { throw "Streamline SDK include/sl.h was not found" }
+          $sdk = Split-Path (Split-Path $slHeader.FullName -Parent) -Parent
+          $interposer = Join-Path $sdk 'bin\x64\sl.interposer.dll'
+          if (-not (Test-Path -LiteralPath $interposer)) {
+            throw "Streamline production bin/x64 directory was not found"
+          }
           "STREAMLINE_SDK=$sdk" | Out-File -FilePath $env:GITHUB_ENV -Append
+          Write-Host "STREAMLINE_SDK=$sdk"
 
       - name: Build and test exact production candidate
         shell: pwsh
