@@ -8,7 +8,7 @@ import org.junit.jupiter.api.Test;
 
 class DlssgPresentationContractTest {
     private static String source(String relative) throws Exception {
-        return Files.readString(Path.of(relative));
+        return Files.readString(Path.of(relative)).replace("\\r\\n", "\\n");
     }
 
     @Test
