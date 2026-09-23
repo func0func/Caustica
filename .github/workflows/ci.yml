@@ -90,7 +90,9 @@ jobs:
 
       - name: Validate Java and shaders
         shell: bash
-        run: ./gradlew check --stacktrace
+        run: |
+          chmod +x ./gradlew
+          ./gradlew check --stacktrace
 
       - name: Explain artifact boundary
         shell: bash
