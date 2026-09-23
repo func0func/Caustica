@@ -82,6 +82,7 @@ jobs:
             throw "Streamline production bin/x64 directory was not found"
           }
           "STREAMLINE_SDK=$sdk" | Out-File -FilePath $env:GITHUB_ENV -Append
+          "CAUSTICA_STREAMLINE_ARCHIVE_SHA256_VERIFIED=$env:STREAMLINE_SDK_SHA256" | Out-File -FilePath $env:GITHUB_ENV -Append
           Write-Host "STREAMLINE_SDK=$sdk"
 
       - name: Build and test exact production candidate
